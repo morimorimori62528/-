@@ -1,5 +1,5 @@
 import os
-import pandas
+import pandas as pd
 import openpyxl
 import sys
 from tkinter import Tk,Label,Button,StringVar,messagebox,filedialog,ttk
@@ -12,7 +12,6 @@ def select_src():
 def select_save():
     save_var.set(filedialog.asksaveasfilename(defaultextension = ".xlsx",filetypes = [("Excel files","*.xlsx")]))
 
-
 #ファイル総数
 def count_file(src_dic):
     return sum(len(files) for _,_,files in os.walk(src_dic))
@@ -23,31 +22,54 @@ def create_file_list(src_dic,save_path,sousuu):
 
     dic = []
     bunsi = 0
-            
+    # dic = [{"保管先フォルダ":ps,"ファイル名":file} for ps,_,files in os.walk(src_dic) for file in files]
+    # bunsi = len(dic)
+    
+    # print(bunsi)
+    # pgs["value"] = bunsi
+    # root.update()
+
     for ps,_,files in os.walk(src_dic):
-
-
-        for cnt in range(len(files)):
+        for file in files:
             if stop_flag :
                 return
+            link = os.path.join(ps,file)
+            link_h = f'=HYPERLINK("{link}","{file}※リンク")'
+            
+            # with open(link,"rb") as f:
+            #     rr = f.read()
 
-            link = os.path.join(ps,files[cnt])
-            link = f'=HYPERLINK("{link}","{files[cnt]}※リンク")'
+            dic.append(
+                {"保管先フォルダ":ps,
+                 "ファイル名":file ,
+                 "リンク":link_h,
+                 "サイズ":os.path.getsize(link),
+                #  "バイト":rr,
+                 "作成日時":os.path.getmtime(link)})
             bunsi += 1 
             num_var.set(f"{bunsi}/{sousuu}")
             pgs["value"] = bunsi
-            
             root.update()
-            
-            dic.append(
-                {"保管先フォルダ":ps,
-                 "ファイル名":files[cnt] ,
-                 "リンク":link})
 
-    df = pandas.DataFrame(dic)
-    df.to_excel(save_path,index = False)
+    df = pd.DataFrame(dic)
+    
+    df["f"] = df["ファイル名"].str.contains(r"\.")
+    df["拡張子"] = df["ファイル名"].str.split(".").str[-1]
+    df["拡張子"] = df["拡張子"].where(df["f"],"")
+    df = df.drop(columns="f")
+    df["作成日時"] = pd.to_datetime(df["作成日時"],unit="s").dt.tz_localize("UTC").dt.tz_convert("Asia/Tokyo").dt.strftime("%Y-%m-%d")
+    df_p = df.groupby("保管先フォルダ").agg(リンク=("リンク","count"),サイズ=("サイズ","sum"))
+    df.insert(loc=1,column="第1階層" ,value=df["保管先フォルダ"].str.split(r"\\").str[0])
+    df.insert(loc=2,column="第2階層" ,value=df["保管先フォルダ"].str.split(r"\\").str[1])
+    df.insert(loc=3,column="第3階層" ,value=df["保管先フォルダ"].str.split(r"\\").str[2])
+    #df = df.pivot_table(index="保管先フォルダ",columns="拡張子",values="サイズ",aggfunc="count")
+    # df.to_excel(save_path)#,index = False)    
+    with pd.ExcelWriter(save_path) as wr:
+        df.to_excel(wr,sheet_name="一覧")
+        df_p.to_excel(wr,sheet_name="集計")
 
 def cxl():
+
     global stop_flag
     stop_flag = True
 
@@ -82,15 +104,13 @@ root = Tk()
 root.title("階層内ファイルリスト化")
 root.geometry("600x600")
 
-
-
 src_var = StringVar()
 save_var = StringVar()
 status_var = StringVar(value = "待機中")
 num_var = StringVar()
 stop_flag = False
 
-
+#ボタン配置
 Label(root,
       text = "対象フォルダ",
       font = ("Meiryo",12)
@@ -144,20 +164,6 @@ Label(root,textvariable = num_var,font = ("Meiryo",12)).pack(anchor = "w",padx =
 pgs = ttk.Progressbar(root,orient = "horizontal",length = 400,mode ="determinate")
 pgs.pack(anchor = "w",padx = 20,pady = 5)
 
-#wb = openpyxl.load_workbook("階層一覧.xlsx") 
-#ws = wb.worksheets[0]
 
-
-#for cnt in range(end):
-
- #   print(cnt)
-  #  for cntc in range(2,5):
-        
-   #     link = str(ws.cell(cnt+1,cntc).value)
-    #    ws.cell(cnt+1,cntc).hyperlink = link
-     #   ws.cell(cnt+1,cntc).style ="Hyperlink"
-
-
-#wb.save("階層一覧.xlsx")
 root.mainloop()
 print("end")
